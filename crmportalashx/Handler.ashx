@@ -18,6 +18,8 @@ public class Handler : IHttpHandler {
         var order = !string.IsNullOrWhiteSpace(context.Request["_order"]) ? context.Request["_order"] : "asc";
         var limit = !string.IsNullOrWhiteSpace(context.Request["_limit"]) ? context.Request["_limit"] : "10";
         var q = !string.IsNullOrWhiteSpace(context.Request["q"]) ? context.Request["q"] : "";
+        var id = !string.IsNullOrWhiteSpace(context.Request["id"]) ? context.Request["id"] : "0";
+        var tip = HttpContext.Current.Request.HttpMethod.ToLower();
 
         context.Response.Clear();
         context.Response.ContentType = "application/json; charset=utf-8";
@@ -61,56 +63,87 @@ public class Handler : IHttpHandler {
                     else
                     {
                         var ret = liste.Value.KullaniciListesi.ToList();
-
-                        // filtre var mı?
-                        if (!string.IsNullOrEmpty(q))
+                        if (id != "0")
                         {
-                            ret = ret.Where(x =>
-                                x.user_kod.ToLower().Contains(q.ToLower()) ||
-                                x.user_ad.ToLower().Contains(q.ToLower()) ||
-                                x.user_soyad.ToLower().Contains(q.ToLower())
-                                ).ToList();
-                        }
-
-                        // sıralama
-                        if (!string.IsNullOrEmpty(sort) && ret.Count>0)
-                        {
-                            //var pi = typeof(UserRes).GetProperty(sort);    
-                            //ret = ret.OrderBy(x => pi.GetValue(x, null));
-                            if (order.ToLower().Equals("asc"))
-                                ret = (from p in ret
-                                       orderby(sort)
-                                       select p).ToList();
-                            else
-                                ret = (from p in ret
-                                       orderby(sort) descending
-                                       select p).ToList();
-                        }
-
-                        // substring
-                        if (ret.Count > start.ToInt())
-                        {
-                            var tmp = new List<UserRes>();
-                            for (var i = 0; i < limit.ToInt(); i++)
+                            #region put
+                            if (tip == "put" && ret.Count>0)
                             {
-                                if (ret.Count > (start.ToInt() + 1))
-                                {
-                                    tmp.Add(ret[start.ToInt() + 1]);
-                                }
-                                else
-                                {
-                                    break;
-                                }
-                            }
+                                var strJson = new StreamReader(context.Request.InputStream).ReadToEnd();
+                                dynamic newForm = JObject.Parse(strJson);
 
-                            ret = tmp;
+                                var x0 = new WebReference.UserRes[1];
+                                var y0 = new WebReference.UserRes()
+                                {
+                                    id = newForm.id,
+                                    user_kod = newForm.user_kod,
+                                    user_ad = newForm.user_ad,
+                                    user_soyad = newForm.user_soyad,
+                                    user_sifre = newForm.user_sifre != ret[0].user_sifre ? Helper.Md5Hash(newForm.user_sifre.ToString()) : ret[0].user_sifre,
+                                    durum = newForm.durum
+                                };
+                                x0[0] = y0;
+                                var z0 = Helper.GetWebService().InsertPortalUSer(x0);
+                                if (!z0.Result)
+                                    throw new Exception(z0.Message);
+                            }
+                            #endregion
+
+                            var tmp = ret.FirstOrDefault(e => e.id == id.ToInt());
+                            ret = new List<UserRes>();
+                            if (tmp != null) ret.Add(tmp);
                         }
                         else
                         {
-                            ret = new List<UserRes>();
+                            // filtre var mı?
+                            if (!string.IsNullOrEmpty(q))
+                            {
+                                ret = ret.Where(x =>
+                                    x.user_kod.ToLower().Contains(q.ToLower()) ||
+                                    x.user_ad.ToLower().Contains(q.ToLower()) ||
+                                    x.user_soyad.ToLower().Contains(q.ToLower())
+                                ).ToList();
+                            }
+
+                            // sıralama
+                            if (!string.IsNullOrEmpty(sort) && ret.Count > 0)
+                            {
+                                var dynamicPropFromStr = typeof(UserRes).GetProperty(sort);
+
+                                if (order.ToLower().Equals("asc"))
+                                {
+                                    ret = ret.OrderBy(x => dynamicPropFromStr.GetValue(x, null)).ToList();
+                                }
+                                else
+                                {
+                                    ret = ret.OrderByDescending(x => dynamicPropFromStr.GetValue(x, null)).ToList();
+                                }
+                            }
+
+                            // substring
+                            if (ret.Count > 0)
+                            {
+                                var tmp = new List<UserRes>();
+                                for (var i = 0; i < limit.ToInt(); i++)
+                                {
+                                    if (ret.Count > start.ToInt() + i)
+                                    {
+                                        tmp.Add(ret[start.ToInt() + i]);
+                                    }
+                                    else
+                                    {
+                                        break;
+                                    }
+                                }
+
+                                ret = tmp;
+                            }
+                            else
+                            {
+                                ret = new List<UserRes>();
+                            }
                         }
 
-                        var jsonStrx = Newtonsoft.Json.JsonConvert.SerializeObject(liste.Value.KullaniciListesi);
+                        var jsonStrx = Newtonsoft.Json.JsonConvert.SerializeObject(ret);
                         jsonStrx = "{\"count\":\""+ret.Count.ToString()+"\",\"data\":"+jsonStrx+" }";
                         context.Response.Write(jsonStrx);
                         context.Response.End();
