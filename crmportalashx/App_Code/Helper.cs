@@ -2,6 +2,7 @@
 using System.Activities.Statements;
 using System.Collections.Generic;
 using System.Configuration;
+using System.Dynamic;
 using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
@@ -59,5 +60,17 @@ public static class Helper
         {
             throw new System.ArgumentException("Uyumsoft web service'i hata verdi!", ex.Message);
         }
+    }
+
+    public static bool HasProperty(dynamic obj, string name)
+    {
+        Type objType = obj.GetType();
+
+        if (objType == typeof(ExpandoObject))
+        {
+            return ((IDictionary<string, object>)obj).ContainsKey(name);
+        }
+
+        return objType.GetProperty(name) != null;
     }
 }
